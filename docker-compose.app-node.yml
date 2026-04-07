@@ -1,0 +1,107 @@
+# Run on the application VPS (VPS1). Point DB, SMTP, and phpMyAdmin upstream to VPS2.
+# Required in .env: DB_HOST, SMTP_HOST, PMA_UPSTREAM_HOST (typically the data node public IP).
+# Example:
+#   DB_HOST=203.0.113.50 SMTP_HOST=203.0.113.50 PMA_UPSTREAM_HOST=203.0.113.50 \
+#   docker compose -f docker-compose.app-node.yml --env-file .env up -d --build
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      ALLOWED_ADMIN_IPS: ${ALLOWED_ADMIN_IPS:-127.0.0.1,::1}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      PMA_UPSTREAM_HOST: ${PMA_UPSTREAM_HOST}
+      PMA_UPSTREAM_PORT: ${PMA_UPSTREAM_PORT:-8081}
+    volumes:
+      - nginx-logs:/var/log/nginx
+      - ./certs:/etc/nginx/certs:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/default.conf.in:/etc/nginx/templates-manual/default.conf.in:ro
+      - ./nginx/docker-entrypoint.d/15-geo.sh:/docker-entrypoint.d/15-geo.sh:ro
+      - ./nginx/docker-entrypoint.d/22-render-default.sh:/docker-entrypoint.d/22-render-default.sh:ro
+    depends_on:
+      web1:
+        condition: service_started
+      web2:
+        condition: service_started
+    networks:
+      - app-net
+
+  web1:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    hostname: web1
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-appdb}
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-noreply@localhost}
+      APP_BASE_URL: ${APP_BASE_URL:-https://localhost:8443}
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - app-net
+
+  web2:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    hostname: web2
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-appdb}
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-noreply@localhost}
+      APP_BASE_URL: ${APP_BASE_URL:-https://localhost:8443}
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - app-net
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - app-net
+
+  goaccess:
+    image: alpine:3.19
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache goaccess >/dev/null
+        touch /var/log/nginx/access.log
+        touch /var/log/nginx/goaccess.html
+        while true; do
+          goaccess /var/log/nginx/access.log -o /var/log/nginx/goaccess.html --log-format=COMBINED --no-progress 2>/dev/null || true
+          sleep 15
+        done
+    volumes:
+      - nginx-logs:/var/log/nginx
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    driver: bridge
+
+volumes:
+  nginx-logs:

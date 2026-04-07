@@ -1,0 +1,95 @@
+# Run on the data/support VPS (VPS2). Example:
+#   docker compose -f docker-compose.data-node.yml --env-file .env up -d
+# Open firewall: allow 3306 and 8081 from app-node IP only; optionally 8025 for Mailpit UI.
+
+services:
+  db-primary:
+    image: mariadb:11.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-appdb}
+      MYSQL_USER: ${DB_USER:-appuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      REPL_PASSWORD: ${REPL_PASSWORD}
+    volumes:
+      - db-primary-data:/var/lib/mysql
+      - ./mariadb/primary/conf.d:/etc/mysql/conf.d:ro
+      - ./mariadb/primary/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks:
+      - data-net
+
+  db-replica:
+    image: mariadb:11.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - db-replica-data:/var/lib/mysql
+      - ./mariadb/replica/conf.d:/etc/mysql/conf.d:ro
+    depends_on:
+      db-primary:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks:
+      - data-net
+
+  replica-setup:
+    image: mariadb:11.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      REPL_PASSWORD: ${REPL_PASSWORD}
+    volumes:
+      - ./scripts/replica-init.sh:/replica-init.sh:ro
+    entrypoint: ["/bin/bash", "/replica-init.sh"]
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - data-net
+
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    environment:
+      PMA_HOST: db-primary
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-https://localhost:8443/phpmyadmin/}
+    depends_on:
+      db-primary:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    networks:
+      - data-net
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - data-net
+
+networks:
+  data-net:
+    driver: bridge
+
+volumes:
+  db-primary-data:
+  db-replica-data:

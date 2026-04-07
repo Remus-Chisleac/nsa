@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+mariadb -uroot -p"${MYSQL_ROOT_PASSWORD}" <<-EOSQL
+CREATE USER IF NOT EXISTS 'repl'@'%' IDENTIFIED BY '${REPL_PASSWORD}';
+GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
+FLUSH PRIVILEGES;
+EOSQL

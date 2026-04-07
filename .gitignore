@@ -1,0 +1,7 @@
+.env
+/vendor/
+certs/*.crt
+certs/*.key
+!certs/.gitkeep
+*.log
+.DS_Store

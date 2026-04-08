@@ -1,5 +1,5 @@
 # Run on the application VPS (VPS1). Point DB, SMTP, and phpMyAdmin upstream to VPS2.
-# Required in .env: DB_HOST, SMTP_HOST, PMA_UPSTREAM_HOST (typically the data node public IP).
+# Required in .env: DB_HOST, DB_REPLICA_HOST, SMTP_HOST, PMA_UPSTREAM_HOST (data node hostnames/IPs for both DB endpoints).
 # Example:
 #   DB_HOST=203.0.113.50 SMTP_HOST=203.0.113.50 PMA_UPSTREAM_HOST=203.0.113.50 \
 #   docker compose -f docker-compose.app-node.yml --env-file .env up -d --build
@@ -22,6 +22,7 @@ services:
       - ./nginx/conf.d/default.conf.in:/etc/nginx/templates-manual/default.conf.in:ro
       - ./nginx/docker-entrypoint.d/15-geo.sh:/docker-entrypoint.d/15-geo.sh:ro
       - ./nginx/docker-entrypoint.d/22-render-default.sh:/docker-entrypoint.d/22-render-default.sh:ro
+      - ./nginx/docker-entrypoint.d/zz-real-access-log.sh:/docker-entrypoint.d/zz-real-access-log.sh:ro
     depends_on:
       web1:
         condition: service_started
@@ -37,6 +38,7 @@ services:
     hostname: web1
     environment:
       DB_HOST: ${DB_HOST}
+      DB_REPLICA_HOST: ${DB_REPLICA_HOST}
       DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-appdb}
       DB_USER: ${DB_USER:-appuser}
@@ -45,7 +47,7 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_FROM: ${SMTP_FROM:-noreply@localhost}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
       APP_BASE_URL: ${APP_BASE_URL:-https://localhost:8443}
     depends_on:
       redis:
@@ -60,6 +62,7 @@ services:
     hostname: web2
     environment:
       DB_HOST: ${DB_HOST}
+      DB_REPLICA_HOST: ${DB_REPLICA_HOST}
       DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-appdb}
       DB_USER: ${DB_USER:-appuser}
@@ -68,7 +71,7 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-1025}
-      SMTP_FROM: ${SMTP_FROM:-noreply@localhost}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
       APP_BASE_URL: ${APP_BASE_URL:-https://localhost:8443}
     depends_on:
       redis:
@@ -83,15 +86,17 @@ services:
 
   goaccess:
     image: alpine:3.19
+    depends_on:
+      nginx:
+        condition: service_started
     command:
       - /bin/sh
       - -c
       - |
         apk add --no-cache goaccess >/dev/null
-        touch /var/log/nginx/access.log
         touch /var/log/nginx/goaccess.html
         while true; do
-          goaccess /var/log/nginx/access.log -o /var/log/nginx/goaccess.html --log-format=COMBINED --no-progress 2>/dev/null || true
+          goaccess /var/log/nginx/access.log -o /var/log/nginx/goaccess.html --log-format=COMBINED --no-progress || true
           sleep 15
         done
     volumes:

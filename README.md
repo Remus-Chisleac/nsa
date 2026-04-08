@@ -2,6 +2,8 @@
 
 This repository runs a Docker Compose stack: Nginx (HTTP **8080**, HTTPS **8443**), two PHP web replicas, Redis (sessions), MariaDB primary + replica, phpMyAdmin, Mailpit, and GoAccess-style access log HTML at **`/logs`**.
 
+**Database routing (PHP):** The app probes **`DB_HOST`** (primary) and **`DB_REPLICA_HOST`** (replica). If both are reachable, **writes** always go to the primary; **reads** are **load-balanced** with round-robin between primary and replica. If only the primary is up, all queries use the primary. If the **primary is down** but the replica is up, **reads** use the replica (MariaDB **`read_only=1`**); **writes** fail until the primary is back. The UI shows **which host served the last read** and, when the primary is down, **last primary check time from Redis** plus **escalating background re-probes** (5s → 10s → 30s → 60s) and a **manual “Check primary now”** button. If `SHOW REPLICA STATUS` / `Slave_SQL_Running` is **No**, try `docker compose restart db-replica` or, as a last resort, remove the replica volume and let `replica-setup` rebuild the slave from the primary.
+
 You can run everything on **one machine** for development, or split across **two VPSs** (application node vs data node) as required by the project plan.
 
 ---
@@ -62,7 +64,7 @@ docker compose --env-file .env up -d --build
 ```
 
 - App: `http://localhost:8080` and `https://localhost:8443` (browser will warn on self-signed TLS).
-- Mailpit UI: not published by default in the unified file; use split compose on VPS2 or `docker compose exec` / attach Mailpit to a port if you need the UI on one host.
+- **Mailpit UI (unified `docker-compose.yml`):** `http://localhost:8025` (ports **8025** / **1025** are published).
 
 Check status:
 
@@ -173,9 +175,9 @@ docker volume ls
 2. **Open the app:** `https://<your-domain-or-VPS1>:8443` (accept certificate warning if self-signed).
 3. **Show replica identity:** Reload the home page several times; **`Served by`** should alternate between **web1** and **web2** (or show different hostnames).
 4. **Session persistence:** Log in, refresh many times; you should stay logged in on both replicas (Redis sessions).
-5. **Registration + email:** Register a user; open Mailpit at `http://<VPS2>:8025` (split setup) or the published Mailpit port; click the verification link; then log in.
+5. **Registration + email:** Register a user; open Mailpit at `http://localhost:8025` (unified compose) or `http://<VPS2>:8025` (split setup); click the verification link; then log in.
 6. **CRUD:** Create/edit/delete items while logged in.
-7. **phpMyAdmin:** Open `https://<host>:8443/phpmyadmin/` from an **allowed** IP; show tables on **primary**. Optionally show the same data on **replica** (read-only) via a direct MariaDB client if your instructor expects it.
+7. **phpMyAdmin:** Open `https://<host>:8443/phpmyadmin/` from an **allowed** IP; use the **Server** dropdown (**Primary** / **Replica**). Servers are defined in [`phpmyadmin/config.user.inc.php`](phpmyadmin/config.user.inc.php): the replica uses a **control connection to the primary** so phpMyAdmin does not try to write metadata on the read-only replica. **`PMA_ABSOLUTE_URI`** must use the **same hostname** you use in the browser (`localhost` vs `127.0.0.1` are different sites for cookies).
 8. **ACL:** From a **non-allowed** IP (or VPN), show **403** on `/phpmyadmin/` and `/logs`.
 9. **Logs dashboard:** From an allowed IP, open `https://<host>:8443/logs` and explain aggregated access statistics.
 10. **Failure checks (optional):** `docker compose stop web1` — site still works; `docker compose stop web2` — same; restore with `docker compose start web1 web2`.
@@ -208,6 +210,11 @@ docker volume ls
 - **502 / bad gateway:** Check `docker compose ps`; ensure `web1`/`web2` are up; on split deploy, verify VPS1 can reach VPS2: `nc -zv <VPS2_IP> 3306` (and 1025, 8081).
 - **Session lost across refreshes:** Confirm Redis is running and `REDIS_HOST`/`REDIS_PORT` in app containers point to the Redis service on the app node.
 - **Replication:** Inspect `replica-setup` logs; on replica, `SHOW SLAVE STATUS\G` should show `Slave_IO_Running` and `Slave_SQL_Running` as `Yes`.
-- **403 on phpMyAdmin or /logs:** Your client IP must be listed in `ALLOWED_ADMIN_IPS` (comma-separated). Behind NAT, use your **public** egress IP.
+- **403 on phpMyAdmin or /logs:** Your client IP must be listed in `ALLOWED_ADMIN_IPS` (comma-separated). Behind NAT, use your **public** egress IP. Docker often appears as **`172.17.0.1`** (or similar), not `127.0.0.1`, even when you browse to `localhost`.
+- **Blank `/logs`:** Nginx must write a **real** `access.log` on the shared `nginx-logs` volume (see [`nginx/docker-entrypoint.d/zz-real-access-log.sh`](nginx/docker-entrypoint.d/zz-real-access-log.sh)). Recreate **`nginx`** (and **`goaccess`**) after changes, generate some traffic, wait ~15s, then reload `/logs`. If `access.log` was still a symlink to `/dev/stdout`, `wc -l` on that path can appear to hang — use `docker compose exec -T nginx stat /var/log/nginx/access.log` to confirm it is a regular file.
+- **phpMyAdmin “breaks” on Replica:** The replica runs with **`read_only=1`**. The config points **control** (`controlhost`) at **`db-primary`** so UI metadata is not written on the replica. Align **`PMA_ABSOLUTE_URI`** in `.env` with the URL host you actually use. Recreate **`phpmyadmin`** and **`nginx`** after changing [`phpmyadmin/config.user.inc.php`](phpmyadmin/config.user.inc.php) or Nginx timeouts.
+- **`Invalid address: (From): …` / mail fails on registration:** Set **`SMTP_FROM`** to a syntactically valid address PHPMailer accepts (e.g. `noreply@example.com`). Avoid `noreply@localhost` — it is rejected as invalid. Registration sends mail; login does not.
+- **Password reset:** New installs include `reset_token` / `reset_expires_at` on `users`. Existing DB volumes created before that need: [`scripts/add-password-reset-columns.sql`](scripts/add-password-reset-columns.sql) (run via `docker compose exec db-primary mariadb …` as in the file comment).
+- **`No database is reachable` / both primary and replica failed:** The login page shows **details** from MariaDB/PDO (after a code update). Typical causes: `db-primary` / `db-replica` containers not running (`docker compose ps`, then `docker compose up -d`), wrong **`DB_HOST` / `DB_REPLICA_HOST`** for your setup, wrong **`DB_PASSWORD`**, or app containers not on the same Compose project/network as the DBs. Ensure **`DB_NAME`** matches (`appdb`) and MariaDB finished starting (wait ~30s after `up`).
 
 For OS-level setup (hostname, UFW), see `scripts/vps-bootstrap.sh` and `scripts/firewall-ufw.sh`.

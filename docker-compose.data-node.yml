@@ -65,13 +65,13 @@ services:
   phpmyadmin:
     image: phpmyadmin:5-apache
     environment:
-      PMA_HOST: db-primary
-      PMA_PORT: 3306
-      PMA_USER: root
-      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-https://localhost:8443/phpmyadmin/}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
     depends_on:
       db-primary:
+        condition: service_healthy
+      db-replica:
         condition: service_healthy
     ports:
       - "8081:80"

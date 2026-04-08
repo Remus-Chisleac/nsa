@@ -19,6 +19,7 @@ RUN a2enmod rewrite headers
 WORKDIR /var/www/html
 COPY config/ ./config/
 COPY src/ ./src/
+COPY bin/ ./bin/
 COPY public/ ./public/
 
 RUN chown -R www-data:www-data /var/www/html

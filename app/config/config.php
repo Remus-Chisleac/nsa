@@ -15,6 +15,7 @@ if (!function_exists('env')) {
 return [
     'db' => [
         'host' => env('DB_HOST', 'db-primary'),
+        'replica_host' => env('DB_REPLICA_HOST', 'db-replica'),
         'port' => (int) env('DB_PORT', '3306'),
         'name' => env('DB_NAME', 'appdb'),
         'user' => env('DB_USER', 'appuser'),
@@ -27,7 +28,7 @@ return [
     'smtp' => [
         'host' => env('SMTP_HOST', 'mailpit'),
         'port' => (int) env('SMTP_PORT', '1025'),
-        'from' => env('SMTP_FROM', 'noreply@localhost'),
+        'from' => env('SMTP_FROM', 'noreply@example.com'),
     ],
     'app' => [
         'base_url' => rtrim(env('APP_BASE_URL', 'http://localhost:8080'), '/'),

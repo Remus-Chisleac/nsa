@@ -9,12 +9,11 @@ use App\Database;
 $token = (string) ($_GET['token'] ?? '');
 $msg = 'Invalid or expired link.';
 if ($token !== '') {
-    $pdo = Database::pdo();
-    $stmt = $pdo->prepare('SELECT id FROM users WHERE verification_token = ? AND is_verified = 0');
+    $stmt = Database::pdoRead()->prepare('SELECT id FROM users WHERE verification_token = ? AND is_verified = 0');
     $stmt->execute([$token]);
     $row = $stmt->fetch();
     if ($row) {
-        $u = $pdo->prepare('UPDATE users SET is_verified = 1, verification_token = NULL WHERE id = ?');
+        $u = Database::pdoWrite()->prepare('UPDATE users SET is_verified = 1, verification_token = NULL WHERE id = ?');
         $u->execute([(int) $row['id']]);
         $msg = 'Email verified. You can log in.';
     }

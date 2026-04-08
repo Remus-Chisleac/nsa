@@ -43,6 +43,7 @@ services:
       DB_HOST: ${DB_HOST}
       DB_REPLICA_HOST: ${DB_REPLICA_HOST}
       DB_PORT: ${DB_PORT:-3306}
+      DB_REPLICA_PORT: ${DB_REPLICA_PORT:-3306}
       DB_NAME: ${DB_NAME:-appdb}
       DB_USER: ${DB_USER:-appuser}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -67,6 +68,7 @@ services:
       DB_HOST: ${DB_HOST}
       DB_REPLICA_HOST: ${DB_REPLICA_HOST}
       DB_PORT: ${DB_PORT:-3306}
+      DB_REPLICA_PORT: ${DB_REPLICA_PORT:-3306}
       DB_NAME: ${DB_NAME:-appdb}
       DB_USER: ${DB_USER:-appuser}
       DB_PASSWORD: ${DB_PASSWORD}

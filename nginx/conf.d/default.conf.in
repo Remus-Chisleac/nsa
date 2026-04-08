@@ -1,7 +1,7 @@
 upstream php_backends {
   least_conn;
-  server web1:80;
-  server web2:80;
+  server web1:80 max_fails=1 fail_timeout=5s;
+  server web2:80 max_fails=1 fail_timeout=5s;
 }
 
 # HTTP: ACME challenge passthrough + redirect everything else to HTTPS

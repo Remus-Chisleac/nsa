@@ -17,6 +17,7 @@ return [
         'host' => env('DB_HOST', 'db-primary'),
         'replica_host' => env('DB_REPLICA_HOST', 'db-replica'),
         'port' => (int) env('DB_PORT', '3306'),
+        'replica_port' => (int) env('DB_REPLICA_PORT', env('DB_PORT', '3306')),
         'name' => env('DB_NAME', 'appdb'),
         'user' => env('DB_USER', 'appuser'),
         'pass' => env('DB_PASSWORD', ''),

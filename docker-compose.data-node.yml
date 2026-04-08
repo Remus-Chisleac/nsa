@@ -33,6 +33,8 @@ services:
     volumes:
       - db-replica-data:/var/lib/mysql
       - ./mariadb/replica/conf.d:/etc/mysql/conf.d:ro
+    ports:
+      - "3307:3306"
     depends_on:
       db-primary:
         condition: service_healthy

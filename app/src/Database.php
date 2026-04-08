@@ -62,11 +62,12 @@ final class Database
     private static function dsn(string $host): string
     {
         $db = self::cfg()['db'];
+        $port = ($host === $db['replica_host']) ? $db['replica_port'] : $db['port'];
 
         return sprintf(
             'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
             $host,
-            $db['port'],
+            $port,
             $db['name']
         );
     }

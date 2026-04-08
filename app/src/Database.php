@@ -50,7 +50,7 @@ final class Database
     {
         $cfg = self::cfg();
         $host = $cfg['db']['host'];
-        $p = self::tryConnect($host);
+        $p = self::tryConnect($host, $cfg['db']['port']);
         PrimaryState::markProbeResult($p !== null);
     }
 
@@ -59,10 +59,9 @@ final class Database
         return require dirname(__DIR__) . '/config/config.php';
     }
 
-    private static function dsn(string $host): string
+    private static function dsn(string $host, int $port): string
     {
         $db = self::cfg()['db'];
-        $port = ($host === $db['replica_host']) ? $db['replica_port'] : $db['port'];
 
         return sprintf(
             'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
@@ -83,11 +82,11 @@ final class Database
         ];
     }
 
-    private static function tryConnect(string $host): ?\PDO
+    private static function tryConnect(string $host, int $port): ?\PDO
     {
         try {
             $db = self::cfg()['db'];
-            $pdo = new \PDO(self::dsn($host), $db['user'], $db['pass'], self::pdoOptions());
+            $pdo = new \PDO(self::dsn($host, $port), $db['user'], $db['pass'], self::pdoOptions());
             $pdo->query('SELECT 1');
 
             return $pdo;
@@ -110,19 +109,21 @@ final class Database
 
         $db = self::cfg()['db'];
         $primary = $db['host'];
+        $primaryPort = $db['port'];
         $replica = $db['replica_host'];
+        $replicaPort = $db['replica_port'];
 
         self::$lastConnectErrors = [];
         self::$primaryLabel = $primary;
         self::$replicaLabel = $replica;
 
-        $r = self::tryConnect($replica);
+        $r = self::tryConnect($replica, $replicaPort);
 
         $skipPrimaryTcp = PrimaryState::shouldSkipPrimaryTcp();
         $p = null;
 
         if (!$skipPrimaryTcp) {
-            $p = self::tryConnect($primary);
+            $p = self::tryConnect($primary, $primaryPort);
             if ($p !== null) {
                 PrimaryState::markPrimaryUp();
             } else {
@@ -131,7 +132,7 @@ final class Database
         }
 
         if ($r === null && $p === null && $skipPrimaryTcp) {
-            $p = self::tryConnect($primary);
+            $p = self::tryConnect($primary, $primaryPort);
             if ($p !== null) {
                 PrimaryState::markPrimaryUp();
             } else {
@@ -159,8 +160,8 @@ final class Database
             $er = self::$lastConnectErrors[$replica] ?? 'connection failed';
             throw new \RuntimeException(
                 'No database is reachable (primary and replica both failed). '
-                . 'Primary [' . $primary . ']: ' . $ep
-                . ' | Replica [' . $replica . ']: ' . $er
+                . 'Primary [' . $primary . ':' . $primaryPort . ']: ' . $ep
+                . ' | Replica [' . $replica . ':' . $replicaPort . ']: ' . $er
                 . ' — Check: `docker compose ps` (db-primary, db-replica running?), '
                 . 'web + DB on same Compose network, DB_USER/DB_PASSWORD/DB_NAME in .env.'
             );

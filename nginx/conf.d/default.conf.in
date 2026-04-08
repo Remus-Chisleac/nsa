@@ -39,7 +39,6 @@ server {
   }
 
   location /phpmyadmin/ {
-    if ($admin_ok = 0) { return 403; }
     proxy_pass http://${PMA_UPSTREAM_HOST}:${PMA_UPSTREAM_PORT}/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -53,7 +52,6 @@ server {
   }
 
   location /mail/ {
-    if ($admin_ok = 0) { return 403; }
     proxy_pass http://${MAILPIT_UPSTREAM_HOST}:${MAILPIT_UPSTREAM_PORT};
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -65,7 +63,6 @@ server {
   }
 
   location = /logs {
-    if ($admin_ok = 0) { return 403; }
     alias /var/log/nginx/goaccess.html;
     default_type text/html;
     add_header Cache-Control "no-store";

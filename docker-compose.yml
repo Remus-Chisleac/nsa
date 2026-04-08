@@ -2,16 +2,19 @@ services:
   nginx:
     image: nginx:1.27-alpine
     ports:
-      - "8080:8080"
-      - "8443:8443"
+      - "80:80"
+      - "443:443"
     environment:
       ALLOWED_ADMIN_IPS: ${ALLOWED_ADMIN_IPS:-127.0.0.1,::1}
       APP_DOMAIN: ${APP_DOMAIN:-localhost}
       PMA_UPSTREAM_HOST: ${PMA_UPSTREAM_HOST:-phpmyadmin}
       PMA_UPSTREAM_PORT: ${PMA_UPSTREAM_PORT:-80}
+      MAILPIT_UPSTREAM_HOST: ${MAILPIT_UPSTREAM_HOST:-mailpit}
+      MAILPIT_UPSTREAM_PORT: ${MAILPIT_UPSTREAM_PORT:-8025}
     volumes:
       - nginx-logs:/var/log/nginx
       - ./certs:/etc/nginx/certs:ro
+      - ./certs/acme:/var/www/certbot:ro
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d/default.conf.in:/etc/nginx/templates-manual/default.conf.in:ro
       - ./nginx/docker-entrypoint.d/15-geo.sh:/docker-entrypoint.d/15-geo.sh:ro
@@ -169,6 +172,7 @@ services:
     image: phpmyadmin:5-apache
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-}
     volumes:
       - ./phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
     depends_on:
@@ -181,8 +185,9 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
+    environment:
+      MP_WEBROOT: /mail
     ports:
-      - "8025:8025"
       - "1025:1025"
     networks:
       - networking-net

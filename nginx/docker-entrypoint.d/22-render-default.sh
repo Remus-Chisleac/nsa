@@ -7,4 +7,4 @@ if [ ! -f "$SRC" ]; then
   echo "22-render-default: missing $SRC" >&2
   exit 1
 fi
-envsubst '${APP_DOMAIN} ${PMA_UPSTREAM_HOST} ${PMA_UPSTREAM_PORT}' < "$SRC" > /etc/nginx/conf.d/default.conf
+envsubst '${APP_DOMAIN} ${PMA_UPSTREAM_HOST} ${PMA_UPSTREAM_PORT} ${MAILPIT_UPSTREAM_HOST} ${MAILPIT_UPSTREAM_PORT}' < "$SRC" > /etc/nginx/conf.d/default.conf

@@ -1,7 +1,8 @@
+# Load balance PHP app across web1 / web2 (see docker-compose web1, web2)
 upstream php_backends {
   least_conn;
-  server web1:80 max_fails=1 fail_timeout=5s;
-  server web2:80 max_fails=1 fail_timeout=5s;
+  server web1:80 max_fails=3 fail_timeout=10s;
+  server web2:80 max_fails=3 fail_timeout=10s;
 }
 
 # HTTP: ACME challenge passthrough + redirect everything else to HTTPS
@@ -39,6 +40,9 @@ server {
   }
 
   location /phpmyadmin/ {
+    if ($admin_ok = 0) {
+      return 403;
+    }
     proxy_pass http://${PMA_UPSTREAM_HOST}:${PMA_UPSTREAM_PORT}/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -63,6 +67,9 @@ server {
   }
 
   location = /logs {
+    if ($admin_ok = 0) {
+      return 403;
+    }
     alias /var/log/nginx/goaccess.html;
     default_type text/html;
     add_header Cache-Control "no-store";
